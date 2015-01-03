@@ -8,6 +8,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Hashtable;
+import java.util.Random;
 
 public class Parser {
 	
@@ -16,28 +18,31 @@ public class Parser {
 								"at", "on", "over", "about", "between", "among", "inside", "you", "he", "she", "we", "it", "they",
 								"my", "mine", "your", "yours", "him", "his", "her", "its", "our", "ours", "them", "ther", "theirs",
 								"wpr", "com", "us", "uk", "of", "when", "where", "what", "which", "with", "that", "why", "who", "has", "have", "been",
-								"dmn", "unh", "edu"};
+								"dmn", "unh", "edu", "things", "article"};
 	
 	public static void main(String[] args) throws IOException {
 		System.out.println("------------------ FILE'S PARSER FOR TEXT CLASSIFICATION -------------------");
 		System.out.println("All the file will be cleaned from punctuation, unuseful spaces and newlines.");
-		String finalPath = "./20news_parsed";
+		String finalPath = "C:\\Users\\Simone\\20news_parsed";
 		File workDir = new File(finalPath);
+		int numberFiles = 0;
 		if (workDir.isDirectory()){
-			System.out.println("Folder ./20news_parsed already presents, it will be deleted with ll its content.");
+			System.out.println("Folder ./20news_parsed already presents, it will be deleted with all its content.");
 			deleteDirectory(workDir);
 		}
+		System.out.println("Folder and its content deleted correctly.");
+		System.out.println();
 		boolean checkDir = new File(finalPath).mkdir();
 		if(!checkDir){
 			System.out.println("Creation folder failed.\nThe system will exit.");
 			System.exit(0);
 		}			
 		System.out.println(finalPath+" directory created.");
-		
+		System.out.println();
 		String path = "C:\\Users\\Simone\\Dropbox\\Master\\Data Mining\\Project\\news20\\20_newsgroup";
 		File folders = new File(path);
 		ArrayList<String> folderList = new ArrayList<String>(Arrays.asList(folders.list()));
-		System.out.println("Start parsing each file...");
+		System.out.println("----- Start parsing each file -----");
 		for(String n : folderList){			
 			File currentFolder = new File(path+"\\"+n);
 			ArrayList<String> currentList = new ArrayList<String>(Arrays.asList(currentFolder.list()));
@@ -49,14 +54,26 @@ public class Parser {
 			}
 			System.out.println(finalPath+"/"+n+" directory created.");
 			for(String currentFile : currentList){				
-				File newFile = new File(finalPath+"/"+n+"/"+currentFile);
-				FileWriter fw = new FileWriter(newFile.getAbsoluteFile());
-				BufferedWriter bw = new BufferedWriter(fw);
-				bw.write(fileToString(path, n, currentFile));				
-				bw.close();
-				fw.close();
+				String contentCurrentFile = fileToString(path, n, currentFile);
+				if(!contentCurrentFile.isEmpty()){
+					File newFile = new File(finalPath+"/"+n+"/"+currentFile);
+					FileWriter fw = new FileWriter(newFile.getAbsoluteFile());
+					BufferedWriter bw = new BufferedWriter(fw);
+					bw.write(contentCurrentFile);	
+					bw.close();
+					fw.close();
+					numberFiles++;
+				}				
 			}			
 		}
+		System.out.println();
+		System.out.println("Parsing file phase completed.\nNumber of files created: "+numberFiles);
+		System.out.println();
+		System.out.println();
+		System.out.println("----- Starting to write the files .arff -----");
+		creationARFF(numberFiles);
+		System.out.println();
+		System.out.println();
 		System.out.println("Done.");
 	}
 	
@@ -121,6 +138,123 @@ public class Parser {
 //			System.out.println(returnContent);
 		}
 		return returnContent;
+	}
+	
+	/*Reading again all the file created before and collecting them in an Hashtable to write the .arff file.*/
+	public static void creationARFF(int numberFiles) throws IOException{
+		Hashtable<Integer, String[]> contentTrainingData = new Hashtable<Integer, String[]>();
+		Hashtable<Integer, String[]> contentTestData = new Hashtable<Integer, String[]>();
+		Random r = new Random();
+		int numberAttributes=0, counter=0, percentageTest =0, counterTest=0;
+		String path = "C:\\Users\\Simone\\20news_parsed";
+		File folders = new File(path);
+		ArrayList<String> folderList = new ArrayList<String>(Arrays.asList(folders.list()));
+		System.out.println("----- Start reading each file for creating the hashtable -----");
+		for(String n : folderList){
+			File currentFolder = new File(path+"/"+n);
+			ArrayList<String> currentList = new ArrayList<String>(Arrays.asList(currentFolder.list()));
+//			System.out.println("Current folder: "+currentFolder.getName()/*+"\n#files: "+currentList.size()*/);
+			for(String file : currentList){				
+				FileReader fr = new FileReader(path+"/"+n+"/"+file);
+//				System.out.println(path+"/"+n+"/"+file);
+				BufferedReader br = new BufferedReader(fr);
+				String[] content = br.readLine().split(" ");				
+				if (counter == 0)
+					numberAttributes = content.length;
+				if (content.length > numberAttributes)
+					numberAttributes = content.length;
+				if(r.nextBoolean() && !contentTestData.containsKey(r.nextInt(numberFiles)) && percentageTest<200){
+					contentTestData.put(counterTest, content);
+					percentageTest++;
+					counterTest++;
+				} else {
+					contentTrainingData.put(counter, content);
+					counter++;
+				}
+//				System.out.println("Counter: "+counter+"\nContent Lenght: "+content.length+"\nAttrs: "+numberAttributes);
+				fr.close();
+				br.close();				
+			}
+		}
+		System.out.println();
+		System.out.println("Files for training data: "+contentTrainingData.size()+"\nFiles for testing data: "+contentTestData.size());
+		System.out.println();
+		writeTrainingFile(contentTrainingData, numberAttributes);
+		writeTestingFile(contentTestData, numberAttributes);
+	}
+	
+	/*Writing (physically) the 20_newsgroups_training.arff file.*/
+	@SuppressWarnings("resource")
+	public static void writeTrainingFile(Hashtable<Integer, String[]> contentAllFiles, int numberAttributes) throws IOException {
+		System.out.println("Start to write 20_newsgroups_training.arff file...");
+//		System.out.println("Final number files scanned: "+contentAllFiles.size()+"\nFinal number of attributes: "+numberAttributes);
+		File trainingData = new File("./20_newsgroups_training.arff");
+		FileWriter fw = new FileWriter(trainingData);
+		BufferedWriter bw = new BufferedWriter(fw);
+		
+		String newline = "";
+		newline = "% 1. Title: 20 news groups\n"
+				+ "%\n"
+				+ "% Created by: Luca Bellettati and Simone Tritini (Free University of Bozen-Bolzano) @ 2015\n\n"
+				+ "@RELATION\20_newsgroups\n\n";
+		bw.write(newline);
+		for(int i=0; i<numberAttributes; i++){
+			newline = "@ATTRIBUTE\ta"+i+"\tNOMINAL\n";
+			bw.write(newline);
+		}
+		newline = "\n@DATA\n";
+		bw.write(newline);
+
+		for(Integer key : contentAllFiles.keySet()){
+			
+			String[] currentContent = contentAllFiles.get(key);
+			newline = "";
+			for(int i=0; i<currentContent.length; i++){
+				newline = newline + currentContent[i];
+				if(i!=0 && i<currentContent.length-1)
+					newline = newline+",";
+			}
+			bw.write(newline+"\n");
+		}
+		
+//		fw.close();
+//		bw.close();
+	}
+	
+	/*Writing (physically) the 20_newsgroups_test.arff file.*/
+	@SuppressWarnings("resource")
+	public static void writeTestingFile(Hashtable<Integer, String[]> contentAllFiles, int numberAttributes) throws IOException {
+		System.out.println("Start to write 20_newsgroups_test.arff file...");
+//		System.out.println("Final number files scanned: "+contentAllFiles.size()+"\nFinal number of attributes: "+numberAttributes);
+		File arff = new File("./20_newsgroups_test.arff");
+		FileWriter fw = new FileWriter(arff);
+		BufferedWriter bw = new BufferedWriter(fw);
+		String newline = "";
+		newline = "% 1. Title: 20 news groups\n"
+				+ "%\n"
+				+ "% Created by: Luca Bellettati and Simone Tritini (Free University of Bozen-Bolzano) @ 2015\n\n"
+				+ "@RELATION\20_newsgroups\n\n";
+		bw.write(newline);
+		for(int i=0; i<numberAttributes; i++){
+			newline = "@ATTRIBUTE\ta"+i+"\tNOMINAL\n";
+			bw.write(newline);
+		}
+		newline = "\n@DATA\n";
+		bw.write(newline);
+
+		for(Integer key : contentAllFiles.keySet()){
+			String[] currentContent = contentAllFiles.get(key);
+			newline = "";
+			for(int i=0; i<currentContent.length; i++){
+				newline = newline + currentContent[i];
+				if(i!=0 && i<currentContent.length-1)
+					newline = newline+",";
+			}
+			bw.write(newline+"\n");
+		}
+		
+//		fw.close();
+//		bw.close();
 	}
 	
 }
